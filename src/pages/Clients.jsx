@@ -15,7 +15,7 @@ function Clients() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState(null);
   const [formData, setFormData] = useState({
-    name: '',
+    Name: '',
     email: '',
     phone: '',
     type: '',
@@ -370,7 +370,7 @@ function Clients() {
 
       {/* Client Form Modal */}
       <AnimatePresence>
-        <FormModal
+        {isModalOpen && <FormModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           title={currentClient ? "Edit Client" : "Create New Client"}
@@ -515,7 +515,7 @@ function Clients() {
               </button>
             </div>
           </form>
-        </FormModal>
+        </FormModal>}
       </AnimatePresence>
     </>
   );
