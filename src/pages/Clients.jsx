@@ -1,15 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Plus, Mail, Phone, Calendar, Search, User, MapPin, Heart, CheckCircle } from 'lucide-react';
 import FormModal from '../components/FormModal';
-import { clients as initialClients, clientTypes } from '../utils/mockData';
+import { clientTypes } from '../utils/mockData';
 import { validateRequired, validateEmail, validatePhone } from '../utils/formUtils';
+import clientService from '../services/clientService';
 
 function Clients() {
   // State for clients data
-  const [clients, setClients] = useState(initialClients);
-  
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
   // State for modal and form
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentClient, setCurrentClient] = useState(null);
@@ -29,11 +30,37 @@ function Clients() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   
+  // Fetch clients when component mounts
+  useEffect(() => {
+    const fetchClientsData = async () => {
+      setLoading(true);
+      try {
+        const data = await clientService.fetchClients({
+          searchQuery: searchQuery,
+          type: typeFilter !== 'All' ? typeFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedData = data.map(client => ({
+          id: client.Id,
+          ...client
+        }));
+        setClients(formattedData);
+      } catch (error) {
+        toast.error('Failed to load clients: ' + (error.message || 'Unknown error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchClientsData();
+  }, [searchQuery, typeFilter]);
+  
   // Initialize form when editing a client
   const handleEditClient = (client) => {
     setCurrentClient(client);
     setFormData({
-      name: client.name,
+      Name: client.Name,
       email: client.email,
       phone: client.phone,
       type: client.type,
@@ -47,7 +74,7 @@ function Clients() {
   const handleNewClient = () => {
     setCurrentClient(null);
     setFormData({
-      name: '',
+      Name: '',
       email: '',
       phone: '',
       type: '',
@@ -81,7 +108,7 @@ function Clients() {
     
     // Required fields
     const requiredFields = {
-      name: 'Name',
+      Name: 'Name',
       email: 'Email',
       phone: 'Phone number',
       type: 'Client type'
@@ -107,44 +134,70 @@ function Clients() {
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form.');
-      return;
-    }
-    
-    try {
+    setLoading(true);
+
+    const submitForm = async () => {
+      if (!validateForm()) {
+        toast.error('Please fix the errors in the form.');
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const clientData = {
+          Name: formData.Name,
+          email: formData.email,
+          phone: formData.phone,
+          type: formData.type,
+          address: formData.address,
+          preferences: formData.preferences
+        };
+        
       if (currentClient) {
-        // Update existing client
-        const updatedClients = clients.map(client => 
-          client.id === currentClient.id ? { ...client, ...formData } : client
-        );
-        setClients(updatedClients);
+        // Update client in database
+        await clientService.updateClient(currentClient.id, clientData);
         toast.success('Client updated successfully!');
       } else {
-        // Create new client
-        const newClient = {
-          ...formData,
-          id: Math.max(0, ...clients.map(c => c.id)) + 1,
-          events: 0
-        };
-        setClients([...clients, newClient]);
+        // Create client in database
+        await clientService.createClient(clientData);
         toast.success('Client created successfully!');
       }
       
+      // Refresh client list from server
+      const data = await clientService.fetchClients({
+        searchQuery: searchQuery,
+        type: typeFilter !== 'All' ? typeFilter : null
+      });
+      const formattedData = data.map(client => ({
+        id: client.Id,
+        ...client
+      }));
+      setClients(formattedData);
       setIsModalOpen(false);
-    } catch (error) {
-      toast.error('An error occurred while saving the client.');
-      console.error('Error saving client:', error);
-    }
+      } catch (error) {
+        toast.error('An error occurred while saving the client: ' + (error.message || 'Unknown error'));
+        console.error('Error saving client:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    submitForm();
   };
   
   // Handle client deletion
   const handleDeleteClient = (clientId) => {
     if (window.confirm('Are you sure you want to delete this client?')) {
-      const updatedClients = clients.filter(client => client.id !== clientId);
-      setClients(updatedClients);
-      toast.success('Client deleted successfully!');
+      setLoading(true);
+      clientService.deleteClient(clientId)
+        .then(() => {
+          setClients(clients.filter(client => client.id !== clientId));
+          toast.success('Client deleted successfully!');
+        })
+        .catch(error => {
+          toast.error('Failed to delete client: ' + (error.message || 'Unknown error'));
+        })
+        .finally(() => setLoading(false));
     }
   };
   
@@ -153,14 +206,14 @@ function Clients() {
     let result = [...clients];
     
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery?.toLowerCase() || '';
       result = result.filter(client => 
-        client.name.toLowerCase().includes(query) ||
-        client.email.toLowerCase().includes(query) ||
-        client.phone.includes(query)
+        client.Name?.toLowerCase().includes(query) ||
+        client.email?.toLowerCase().includes(query) ||
+        client.phone?.includes(query)
       );
     }
-    
+
     if (typeFilter !== 'All') {
       result = result.filter(client => client.type === typeFilter);
     }
@@ -171,7 +224,7 @@ function Clients() {
   // Get client initials
   const getInitials = (name) => {
     return name
-      .split(' ')
+      ?.split(' ')
       .map(part => part.charAt(0))
       .join('')
       .toUpperCase()
@@ -227,78 +280,83 @@ function Clients() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredClients.length > 0 ? filteredClients.map((client) => (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            key={client.id}
-            className="card p-6 hover:shadow-lg transition-shadow"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center">
-                <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-bold text-lg mr-4">
-                  {getInitials(client.name)}
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredClients.length > 0 ? filteredClients.map((client) => (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              key={client.id}
+              className="card p-6 hover:shadow-lg transition-shadow"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center">
+                  <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-bold text-lg mr-4">
+                    {getInitials(client.Name)}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">{client.Name}</h3>
+                    <span className="text-xs px-2 py-1 rounded-full bg-surface-100 dark:bg-surface-700">
+                      {client.type}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold">{client.name}</h3>
-                  <span className="text-xs px-2 py-1 rounded-full bg-surface-100 dark:bg-surface-700">
-                    {client.type}
-                  </span>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => handleEditClient(client)}
+                    className="p-1.5 rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteClient(client.id)}
+                    className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 transition-colors text-red-600 dark:text-red-400"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <div className="flex space-x-2">
+              
+              <div className="space-y-2 text-sm text-surface-600 dark:text-surface-400">
+                <div className="flex items-center">
+                  <MapPin size={16} className="mr-2 text-primary" />
+                  <span>{client.address || 'No address provided'}</span>
+                </div>
+                <div className="flex items-center">
+                  <Mail size={16} className="mr-2 text-primary" />
+                  <span>{client.email}</span>
+                </div>
+                <div className="flex items-center">
+                  <Phone size={16} className="mr-2 text-primary" />
+                  <span>{client.phone}</span>
+                </div>
+                <div className="flex items-center">
+                  <Calendar size={16} className="mr-2 text-primary" />
+                  <span>0 Events</span>
+                </div>
+                <div className="flex items-start mt-3">
+                  <Heart size={16} className="mr-2 text-primary flex-shrink-0 mt-0.5" />
+                  <span>{client.preferences || 'No preferences recorded'}</span>
+                </div>
+              </div>
+            </motion.div>
+          )) : (
+            <div className="col-span-full text-center py-12">
+              <User size={48} className="mx-auto text-surface-400 mb-4" />
+              <h3 className="text-lg font-medium mb-2">No clients found</h3>
+              <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
+                {searchQuery || typeFilter !== 'All' 
+                  ? "No clients match your current filters. Try adjusting your search criteria."
+                  : "You haven't added any clients yet. Click the 'Create New Client' button to get started."}
+              </p>
+              {(searchQuery || typeFilter !== 'All') && (
                 <button 
-                  onClick={() => handleEditClient(client)}
-                  className="p-1.5 rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 transition-colors"
-                >
-                  Edit
-                </button>
-                <button 
-                  onClick={() => handleDeleteClient(client.id)}
-                  className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 transition-colors text-red-600 dark:text-red-400"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-            
-            <div className="space-y-2 text-sm text-surface-600 dark:text-surface-400">
-              <div className="flex items-center">
-                <MapPin size={16} className="mr-2 text-primary" />
-                <span>{client.address || 'No address provided'}</span>
-              </div>
-              <div className="flex items-center">
-                <Mail size={16} className="mr-2 text-primary" />
-                <span>{client.email}</span>
-              </div>
-              <div className="flex items-center">
-                <Phone size={16} className="mr-2 text-primary" />
-                <span>{client.phone}</span>
-              </div>
-              <div className="flex items-center">
-                <Calendar size={16} className="mr-2 text-primary" />
-                <span>{client.events} {client.events === 1 ? 'Event' : 'Events'}</span>
-              </div>
-              <div className="flex items-start mt-3">
-                <Heart size={16} className="mr-2 text-primary flex-shrink-0 mt-0.5" />
-                <span>{client.preferences || 'No preferences recorded'}</span>
-              </div>
-            </div>
-          </motion.div>
-        )) : (
-          <div className="col-span-full text-center py-12">
-            <User size={48} className="mx-auto text-surface-400 mb-4" />
-            <h3 className="text-lg font-medium mb-2">No clients found</h3>
-            <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
-              {searchQuery || typeFilter !== 'All' 
-                ? "No clients match your current filters. Try adjusting your search criteria."
-                : "You haven't added any clients yet. Click the 'Create New Client' button to get started."}
-            </p>
-            {(searchQuery || typeFilter !== 'All') && (
-              <button 
-                onClick={() => {
-                  setSearchQuery('');
+                  onClick={() => {
+                    setSearchQuery('');
                   setTypeFilter('All');
                 }}
                 className="btn btn-outline"
@@ -317,18 +375,18 @@ function Clients() {
           onClose={() => setIsModalOpen(false)}
           title={currentClient ? "Edit Client" : "Create New Client"}
           description={currentClient 
-            ? "Update the client information below" 
+             <div className="col-span-full">
             : "Fill in the details to create a new client"}
         >
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  name="Name"
               {/* Name */}
-              <div className="col-span-full">
+                  value={formData.Name}
                 <label htmlFor="name" className="label">Client Name</label>
-                <input
+                  className={`input ${errors.Name ? 'border-red-500 focus:ring-red-500' : ''}`}
                   id="name"
                   name="name"
-                  type="text"
+                {errors.Name && <p className="mt-1 text-sm text-red-500">{errors.Name}</p>}
                   value={formData.name}
                   onChange={handleInputChange}
                   className={`input ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
@@ -441,7 +499,7 @@ function Clients() {
                 className="btn btn-outline"
               >
                 Cancel
-              </button>
+                disabled={loading}>
               <button
                 type="submit"
                 className="btn btn-primary"

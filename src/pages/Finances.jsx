@@ -4,13 +4,16 @@ import { toast } from 'react-toastify';
 import Chart from 'react-apexcharts';
 import { Plus, DollarSign, TrendingUp, TrendingDown, Filter, Search, CheckCircle, CalendarRange, CreditCard, Tag } from 'lucide-react';
 import FormModal from '../components/FormModal';
-import { finances as initialFinances, events, expenseCategories, financialMetrics } from '../utils/mockData';
+import { expenseCategories, financialMetrics } from '../utils/mockData';
 import { validateRequired, validateNumeric, formatCurrency } from '../utils/formUtils';
+import financeService from '../services/financeService';
+import eventService from '../services/eventService';
 
 function Finances() {
   // State for finances data
-  const [finances, setFinances] = useState(initialFinances);
-  
+  const [finances, setFinances] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
   // State for modal and form
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -33,6 +36,61 @@ function Finances() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
   
+  // Fetch finances and events when component mounts
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch events for the dropdown
+        const eventsData = await eventService.fetchEvents();
+        const formattedEvents = eventsData.map(event => ({
+          id: event.Id,
+          title: event.title
+        }));
+        setEvents(formattedEvents);
+        
+        // Fetch financial transactions
+        const financesData = await financeService.fetchFinancialTransactions({
+          searchQuery: searchQuery,
+          eventId: eventFilter !== 'all' ? eventFilter : null,
+          type: typeFilter !== 'all' ? typeFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedFinances = financesData.map(transaction => ({
+          id: transaction.Id,
+          type: transaction.type,
+          category: transaction.category,
+          description: transaction.description,
+          amount: transaction.amount,
+          date: transaction.date,
+          status: transaction.status,
+          eventId: transaction.event,
+          eventName: transaction.eventDetails?.Name || 'Unknown Event'
+        }));
+        
+        setFinances(formattedFinances);
+      } catch (error) {
+        toast.error('Failed to load financial data: ' + (error.message || 'Unknown error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [searchQuery, eventFilter, typeFilter]);
+  
+  // Refresh data when filters change
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => {
+        // This will trigger the fetchData effect
+        setLoading(true);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [searchQuery, eventFilter, typeFilter]);
+  
   // Update chart theme when dark mode changes
   const updateDarkMode = () => {
     setDarkMode(document.documentElement.classList.contains('dark'));
@@ -51,7 +109,7 @@ function Finances() {
       category: item.category,
       description: item.description,
       amount: item.amount.toString(),
-      date: new Date(item.date).toISOString().split('T')[0],
+      date: item.date ? new Date(item.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       status: item.status
     });
     setIsModalOpen(true);
@@ -118,56 +176,91 @@ function Finances() {
   
   // Handle form submission
   const handleSubmit = (e) => {
-    e.preventDefault();
+   e.preventDefault();
+    setLoading(true);
     
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form.');
-      return;
-    }
-    
-    try {
-      const financeData = {
-        ...formData,
-        eventId: parseInt(formData.eventId),
-        amount: parseFloat(formData.amount)
-      };
-      
-      if (currentItem) {
-        // Update existing finance item
-        const updatedFinances = finances.map(item => 
-          item.id === currentItem.id ? { ...financeData, id: currentItem.id } : item
-        );
-        setFinances(updatedFinances);
-        toast.success('Financial record updated successfully!');
-      } else {
-        // Create new finance item
-        const newItem = {
-          ...financeData,
-          id: Math.max(0, ...finances.map(item => item.id)) + 1
-        };
-        setFinances([...finances, newItem]);
-        toast.success('Financial record created successfully!');
+    const submitForm = async () => {
+      if (!validateForm()) {
+        toast.error('Please fix the errors in the form.');
+        setLoading(false);
+        return;
       }
       
-      setIsModalOpen(false);
-    } catch (error) {
-      toast.error('An error occurred while saving the financial record.');
-      console.error('Error saving financial record:', error);
-    }
+      try {
+        // Format the transaction data for the API
+        const transactionData = {
+          Name: formData.description, // Use description as the Name field
+          type: formData.type,
+          category: formData.category,
+          description: formData.description,
+          amount: parseFloat(formData.amount),
+          date: formData.date,
+          status: formData.status,
+          event: parseInt(formData.eventId)
+        };
+        
+        if (currentItem) {
+          // Update existing transaction
+          await financeService.updateFinancialTransaction(currentItem.id, transactionData);
+          toast.success('Financial transaction updated successfully!');
+        } else {
+          // Create new transaction
+          await financeService.createFinancialTransaction(transactionData);
+          toast.success('Financial transaction created successfully!');
+        }
+        
+        // Refresh finance list from server
+        const data = await financeService.fetchFinancialTransactions({
+          searchQuery: searchQuery,
+          eventId: eventFilter !== 'all' ? eventFilter : null,
+          type: typeFilter !== 'all' ? typeFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedFinances = data.map(transaction => ({
+          id: transaction.Id,
+          type: transaction.type,
+          category: transaction.category,
+          description: transaction.description,
+          amount: transaction.amount,
+          date: transaction.date,
+          status: transaction.status,
+          eventId: transaction.event,
+          eventName: transaction.eventDetails?.Name || 'Unknown Event'
+        }));
+        
+        setFinances(formattedFinances);
+        setIsModalOpen(false);
+      } catch (error) {
+        toast.error('An error occurred while saving the transaction: ' + (error.message || 'Unknown error'));
+        console.error('Error saving transaction:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    submitForm();
   };
   
   // Handle finance item deletion
   const handleDeleteItem = (itemId) => {
     if (window.confirm('Are you sure you want to delete this financial record?')) {
-      const updatedFinances = finances.filter(item => item.id !== itemId);
-      setFinances(updatedFinances);
-      toast.success('Financial record deleted successfully!');
+      setLoading(true);
+      financeService.deleteFinancialTransaction(itemId)
+        .then(() => {
+          setFinances(finances.filter(item => item.id !== itemId));
+          toast.success('Financial transaction deleted successfully!');
+        })
+        .catch(error => {
+          toast.error('Failed to delete transaction: ' + (error.message || 'Unknown error'));
+        })
+        .finally(() => setLoading(false));
     }
   };
   
   // Apply filters
   const filteredFinances = useMemo(() => {
-    let result = [...finances];
+    let result = finances?.length ? [...finances] : [];
     
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -209,7 +302,7 @@ function Finances() {
   
   // Get event name by ID
   const getEventName = (eventId) => {
-    const event = events.find(event => event.id === eventId);
+    const event = events?.find(event => event.id === eventId);
     return event ? event.title : 'Unknown Event';
   };
   
@@ -313,227 +406,235 @@ function Finances() {
       
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="card p-6"
-        >
+        onClick={handleNewItem}
+        className="btn btn-primary flex items-center"
+      >
+        <Plus size={18} className="mr-1" />
+        Add Transaction
+      </button>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-surface-600 dark:text-surface-400">Total Income</h3>
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <TrendingUp size={20} className="text-green-600 dark:text-green-400" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold">{formatCurrency(summary.income)}</p>
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="card p-6"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-surface-600 dark:text-surface-400">Total Expenses</h3>
-            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-              <TrendingDown size={20} className="text-red-600 dark:text-red-400" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold">{formatCurrency(summary.expenses)}</p>
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="card p-6"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-surface-600 dark:text-surface-400">Net Balance</h3>
-            <div className={`p-2 ${summary.balance >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'} rounded-lg`}>
-              <DollarSign size={20} className={summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} />
-            </div>
-          </div>
-          <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-            {formatCurrency(summary.balance)}
-          </p>
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="card p-6"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-surface-600 dark:text-surface-400">Pending Expenses</h3>
-            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-              <DollarSign size={20} className="text-yellow-600 dark:text-yellow-400" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold">{formatCurrency(summary.pendingExpenses)}</p>
-        </motion.div>
-      </div>
-      
-      {/* Budget vs Actual Chart */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="card p-6 mb-8"
-      >
-        <h3 className="text-lg font-medium mb-4">Budget vs Actual Expenses</h3>
-        <div className="h-80">
-          <Chart options={budgetChartOptions} series={budgetChartSeries} type="bar" height="100%" />
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
-      </motion.div>
-      
-      {/* Transactions List */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="card overflow-hidden"
-      >
-        <div className="p-6 border-b border-surface-200 dark:border-surface-700">
-          <h3 className="text-lg font-medium">Financial Transactions</h3>
-        </div>
-        
-        {/* Filters */}
-        <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-grow">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className="text-surface-400" />
+      ) : (
+        <>
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-surface-600 dark:text-surface-400">Total Income</h3>
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <TrendingUp size={20} className="text-green-600 dark:text-green-400" />
+              </div>
             </div>
-            <input
-              type="text"
-              placeholder="Search transactions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input pl-10"
-            />
-          </div>
+            <p className="text-2xl font-bold">{formatCurrency(summary.income)}</p>
+          </motion.div>
           
-          <div className="flex gap-4">
-            <div className="relative md:w-48">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Filter size={18} className="text-surface-400" />
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-surface-600 dark:text-surface-400">Total Expenses</h3>
+              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                <TrendingDown size={20} className="text-red-600 dark:text-red-400" />
               </div>
-              <select
-                value={eventFilter}
-                onChange={(e) => setEventFilter(e.target.value)}
-                className="input pl-10 appearance-none"
-              >
-                <option value="all">All Events</option>
-                {events.map(event => (
-                  <option key={event.id} value={event.id}>{event.title}</option>
-                ))}
-              </select>
             </div>
-            
-            <div className="relative md:w-48">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Filter size={18} className="text-surface-400" />
+            <p className="text-2xl font-bold">{formatCurrency(summary.expenses)}</p>
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-surface-600 dark:text-surface-400">Net Balance</h3>
+              <div className={`p-2 ${summary.balance >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'} rounded-lg`}>
+                <DollarSign size={20} className={summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} />
               </div>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="input pl-10 appearance-none"
+            </div>
+            <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              {formatCurrency(summary.balance)}
+            </p>
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-surface-600 dark:text-surface-400">Pending Expenses</h3>
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <DollarSign size={20} className="text-yellow-600 dark:text-yellow-400" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold">{formatCurrency(summary.pendingExpenses)}</p>
+          </motion.div>
+        </div>
+              value={searchQuery}
+        {/* Budget vs Actual Chart */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="card p-6 mb-8"
+        >
+          <h3 className="text-lg font-medium mb-4">Budget vs Actual Expenses</h3>
+          <div className="h-80">
+            <Chart options={budgetChartOptions} series={budgetChartSeries} type="bar" height="100%" />
+          </div>
+        </motion.div>
+        
+        {/* Transactions List */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="card overflow-hidden"
+        >
+          <div className="p-6 border-b border-surface-200 dark:border-surface-700">
+            <h3 className="text-lg font-medium">Financial Transactions</h3>
+          </div>
+              >
+          {/* Filters */}
+          <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex flex-col md:flex-row gap-4">
+            <div className="relative flex-grow">
+                  <option key={event.id} value={event.id}>{event.title}</option>
+                <Search size={18} className="text-surface-400" />
+              </select>
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-10"
+              />
               >
                 <option value="all">All Types</option>
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
-              </select>
+            <div className="flex gap-4">
+              <div className="relative md:w-48">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Filter size={18} className="text-surface-400" />
+                </div>
+                <select
+                  value={eventFilter}
+                  onChange={(e) => setEventFilter(e.target.value)}
+                  className="input pl-10 appearance-none"
+                >
+                  <option value="all">All Events</option>
+                  {events.map(event => (
+                    <option key={event.id} value={event.id}>{event.title}</option>
+                  ))}
+                </select>
             </div>
-          </div>
-        </div>
-        
-        {/* Transactions Table */}
-        <div className="overflow-x-auto">
-          {filteredFinances.length > 0 ? (
-            <table className="w-full">
-              <thead className="bg-surface-100 dark:bg-surface-700">
-                <tr>
+              
+              <div className="relative md:w-48">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Filter size={18} className="text-surface-400" />
+                </div>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="input pl-10 appearance-none"
+                >
+                  <option value="all">All Types</option>
+                  <option value="income">Income</option>
+                  <option value="expense">Expense</option>
+                </select>
+              </div>
                   <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Description</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Event</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-surface-800 divide-y divide-surface-200 dark:divide-surface-700">
-                {filteredFinances.map((item) => (
-                  <tr key={item.id} className="hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.description}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{getEventName(item.eventId)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{item.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{formatDate(item.date)}</td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${item.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(item.status)}`}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <div className="flex justify-end space-x-2">
-                        <button 
-                          onClick={() => handleEditItem(item)}
-                          className="text-primary hover:text-primary-dark"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="text-center py-12">
-              <DollarSign size={48} className="mx-auto text-surface-400 mb-4" />
-              <h3 className="text-lg font-medium mb-2">No transactions found</h3>
-              <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
-                {searchQuery || eventFilter !== 'all' || typeFilter !== 'all' 
+          
+          {/* Transactions Table */}
+          <div className="overflow-x-auto">
+            {filteredFinances.length > 0 ? (
+              <table className="w-full">
+                <thead className="bg-surface-100 dark:bg-surface-700">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Event</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Actions</th>
                   ? "No transactions match your current filters. Try adjusting your search criteria."
-                  : "You haven't added any financial transactions yet. Click the 'Add Transaction' button to get started."}
-              </p>
-              {(searchQuery || eventFilter !== 'all' || typeFilter !== 'all') && (
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    setEventFilter('all');
-                    setTypeFilter('all');
-                  }}
-                  className="btn btn-outline"
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </motion.div>
-      
-      {/* Finance Form Modal */}
-      <AnimatePresence>
-        <FormModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title={currentItem ? "Edit Transaction" : "Add New Transaction"}
-          description={currentItem 
-            ? "Update the transaction details below" 
-            : "Fill in the details to add a new transaction"}
+                </thead>
+                <tbody className="bg-white dark:bg-surface-800 divide-y divide-surface-200 dark:divide-surface-700">
+                  {filteredFinances.map((item) => (
+                    <tr key={item.id} className="hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.description}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{item.eventName || getEventName(item.eventId)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{item.category}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{formatDate(item.date)}</td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${item.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {item.type === 'income' ? '+' : '-'}{formatCurrency(item.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(item.status)}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        <div className="flex justify-end space-x-2">
+                          <button 
+                            onClick={() => handleEditItem(item)}
+                            className="text-primary hover:text-primary-dark"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="text-center py-12">
+                <DollarSign size={48} className="mx-auto text-surface-400 mb-4" />
+                <h3 className="text-lg font-medium mb-2">No transactions found</h3>
+                <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
+                  {searchQuery || eventFilter !== 'all' || typeFilter !== 'all' 
+                    ? "No transactions match your current filters. Try adjusting your search criteria."
+                    : "You haven't added any financial transactions yet. Click the 'Add Transaction' button to get started."}
+                </p>
+                {(searchQuery || eventFilter !== 'all' || typeFilter !== 'all') && (
+                  <button 
+                    onClick={() => {
+                      setSearchQuery('');
+                      setEventFilter('all');
+                      setTypeFilter('all');
+                    }}
+                    className="btn btn-outline"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
+        </>
+      )}
         >
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -549,7 +650,7 @@ function Finances() {
                 >
                   <option value="">Select an event</option>
                   {events.map(event => (
-                    <option key={event.id} value={event.id}>{event.title}</option>
+                    <option key={event.id} value={event.id}>{event.title || event.Name}</option>
                   ))}
                 </select>
                 {errors.eventId && <p className="mt-1 text-sm text-red-500">{errors.eventId}</p>}
@@ -712,7 +813,7 @@ function Finances() {
               <button
                 type="submit"
                 className="btn btn-primary"
-              >
+                disabled={loading}>
                 {currentItem ? (
                   <>
                     <CheckCircle size={18} className="mr-2" />

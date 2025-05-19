@@ -1,15 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Plus, Mail, Phone, Tag, Star, Search, Globe, Map, CheckCircle } from 'lucide-react';
 import FormModal from '../components/FormModal';
-import { vendors as initialVendors, vendorCategories } from '../utils/mockData';
+import { vendorCategories } from '../utils/mockData';
 import { validateRequired, validateEmail, validatePhone } from '../utils/formUtils';
+import vendorService from '../services/vendorService';
 
 function Vendors() {
   // State for vendors data
-  const [vendors, setVendors] = useState(initialVendors);
-  
+  const [vendors, setVendors] = useState([]);
+  const [loading, setLoading] = useState(true);
   // State for modal and form
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentVendor, setCurrentVendor] = useState(null);
@@ -31,11 +32,44 @@ function Vendors() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   
+  // Fetch vendors when component mounts
+  useEffect(() => {
+    const fetchVendorsData = async () => {
+      setLoading(true);
+      try {
+        const data = await vendorService.fetchVendors({
+          searchQuery: searchQuery,
+          category: categoryFilter !== 'All' ? categoryFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedData = data.map(vendor => ({
+          id: vendor.Id,
+          name: vendor.Name,
+          email: vendor.email,
+          phone: vendor.phone,
+          category: vendor.category,
+          rating: vendor.rating,
+          address: vendor.address,
+          services: vendor.services,
+          website: vendor.website
+        }));
+        setVendors(formattedData);
+      } catch (error) {
+        toast.error('Failed to load vendors: ' + (error.message || 'Unknown error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchVendorsData();
+  }, [searchQuery, categoryFilter]);
+  
   // Initialize form when editing a vendor
   const handleEditVendor = (vendor) => {
     setCurrentVendor(vendor);
     setFormData({
-      name: vendor.name,
+      Name: vendor.name,
       email: vendor.email,
       phone: vendor.phone,
       category: vendor.category,
@@ -51,7 +85,7 @@ function Vendors() {
   const handleNewVendor = () => {
     setCurrentVendor(null);
     setFormData({
-      name: '',
+      Name: '',
       email: '',
       phone: '',
       category: '',
@@ -87,7 +121,7 @@ function Vendors() {
     
     // Required fields
     const requiredFields = {
-      name: 'Name',
+      Name: 'Name',
       email: 'Email',
       phone: 'Phone number',
       category: 'Category'
@@ -112,51 +146,90 @@ function Vendors() {
   
   // Handle form submission
   const handleSubmit = (e) => {
-    e.preventDefault();
+   e.preventDefault();
+    setLoading(true);
     
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form.');
-      return;
-    }
-    
-    try {
-      if (currentVendor) {
-        // Update existing vendor
-        const updatedVendors = vendors.map(vendor => 
-          vendor.id === currentVendor.id ? { ...vendor, ...formData } : vendor
-        );
-        setVendors(updatedVendors);
-        toast.success('Vendor updated successfully!');
-      } else {
-        // Create new vendor
-        const newVendor = {
-          ...formData,
-          id: Math.max(0, ...vendors.map(v => v.id)) + 1,
-          rating: parseFloat(formData.rating)
-        };
-        setVendors([...vendors, newVendor]);
-        toast.success('Vendor created successfully!');
+    const submitForm = async () => {
+      if (!validateForm()) {
+        toast.error('Please fix the errors in the form.');
+        setLoading(false);
+        return;
       }
       
-      setIsModalOpen(false);
-    } catch (error) {
-      toast.error('An error occurred while saving the vendor.');
-      console.error('Error saving vendor:', error);
-    }
+      try {
+        // Format the vendor data for the API
+        const vendorData = {
+          Name: formData.Name,
+          email: formData.email,
+          phone: formData.phone,
+          category: formData.category,
+          rating: parseFloat(formData.rating),
+          address: formData.address,
+          services: formData.services,
+          website: formData.website
+        };
+        
+        if (currentVendor) {
+          // Update existing vendor
+          await vendorService.updateVendor(currentVendor.id, vendorData);
+          toast.success('Vendor updated successfully!');
+        } else {
+          // Create new vendor
+          await vendorService.createVendor(vendorData);
+          toast.success('Vendor created successfully!');
+        }
+        
+        // Refresh vendor list from server
+        const data = await vendorService.fetchVendors({
+          searchQuery: searchQuery,
+          category: categoryFilter !== 'All' ? categoryFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedData = data.map(vendor => ({
+          id: vendor.Id,
+          name: vendor.Name,
+          email: vendor.email,
+          phone: vendor.phone,
+          category: vendor.category,
+          rating: vendor.rating,
+          address: vendor.address,
+          services: vendor.services,
+          website: vendor.website
+        }));
+        
+        setVendors(formattedData);
+        setIsModalOpen(false);
+      } catch (error) {
+        toast.error('An error occurred while saving the vendor: ' + (error.message || 'Unknown error'));
+        console.error('Error saving vendor:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    submitForm();
   };
   
   // Handle vendor deletion
   const handleDeleteVendor = (vendorId) => {
     if (window.confirm('Are you sure you want to delete this vendor?')) {
-      const updatedVendors = vendors.filter(vendor => vendor.id !== vendorId);
-      setVendors(updatedVendors);
-      toast.success('Vendor deleted successfully!');
+      setLoading(true);
+      vendorService.deleteVendor(vendorId)
+        .then(() => {
+          setVendors(vendors.filter(vendor => vendor.id !== vendorId));
+          toast.success('Vendor deleted successfully!');
+        })
+        .catch(error => {
+          toast.error('Failed to delete vendor: ' + (error.message || 'Unknown error'));
+        })
+        .finally(() => setLoading(false));
     }
   };
   
   // Apply filters
   const filteredVendors = useMemo(() => {
-    let result = [...vendors];
+    let result = vendors?.length ? [...vendors] : [];
     
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -243,80 +316,86 @@ function Vendors() {
           </button>
         ))}
       </div>
-      
-      {filteredVendors.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredVendors.map((vendor) => (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={vendor.id}
-              className="card p-6 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold">{vendor.name}</h3>
-                  <div className="flex items-center mt-1">
-                    {renderStars(vendor.rating)}
-                    <span className="ml-1 text-sm text-surface-500 dark:text-surface-400">{vendor.rating.toFixed(1)}</span>
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => handleEditVendor(vendor)}
-                    className="p-1.5 rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 transition-colors text-sm"
-                  >
-                    Edit
-                  </button>
-                  <button 
-                    onClick={() => handleDeleteVendor(vendor.id)}
-                    className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 transition-colors text-red-600 dark:text-red-400 text-sm"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-              
-              <div className="space-y-2 text-sm text-surface-600 dark:text-surface-400">
-                <div className="flex items-center">
-                  <Tag size={16} className="mr-2 text-primary" />
-                  <span>{vendor.category}</span>
-                </div>
-                <div className="flex items-center">
-                  <Map size={16} className="mr-2 text-primary" />
-                  <span>{vendor.address || 'No address provided'}</span>
-                </div>
-                <div className="flex items-center">
-                  <Mail size={16} className="mr-2 text-primary" />
-                  <span>{vendor.email}</span>
-                </div>
-                <div className="flex items-center">
-                  <Phone size={16} className="mr-2 text-primary" />
-                  <span>{vendor.phone}</span>
-                </div>
-                {vendor.website && (
-                  <div className="flex items-center">
-                    <Globe size={16} className="mr-2 text-primary" />
-                    <a href={vendor.website.startsWith('http') ? vendor.website : `http://${vendor.website}`} 
-                       target="_blank" 
-                       rel="noopener noreferrer" 
-                       className="text-primary hover:underline">
-                      {vendor.website}
-                    </a>
-                  </div>
-                )}
-                {vendor.services && (
-                  <div className="mt-3 pt-3 border-t border-surface-200 dark:border-surface-700">
-                    <p className="font-medium mb-1">Services:</p>
-                    <p>{vendor.services}</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
+     
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <div className="text-center py-12 card">
+        <>
+          {filteredVendors.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredVendors.map((vendor) => (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={vendor.id}
+                  className="card p-6 hover:shadow-lg transition-shadow"
+                >
+                  <div className="flex justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{vendor.name}</h3>
+                      <div className="flex items-center mt-1">
+                        {renderStars(vendor.rating)}
+                        <span className="ml-1 text-sm text-surface-500 dark:text-surface-400">{vendor.rating.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => handleEditVendor(vendor)}
+                        className="p-1.5 rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-700 dark:hover:bg-surface-600 transition-colors text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteVendor(vendor.id)}
+                        className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 transition-colors text-red-600 dark:text-red-400 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm text-surface-600 dark:text-surface-400">
+                    <div className="flex items-center">
+                      <Tag size={16} className="mr-2 text-primary" />
+                      <span>{vendor.category}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <Map size={16} className="mr-2 text-primary" />
+                      <span>{vendor.address || 'No address provided'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <Mail size={16} className="mr-2 text-primary" />
+                      <span>{vendor.email}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <Phone size={16} className="mr-2 text-primary" />
+                      <span>{vendor.phone}</span>
+                    </div>
+                    {vendor.website && (
+                      <div className="flex items-center">
+                        <Globe size={16} className="mr-2 text-primary" />
+                        <a href={vendor.website.startsWith('http') ? vendor.website : `http://${vendor.website}`} 
+                           target="_blank" 
+                           rel="noopener noreferrer" 
+                           className="text-primary hover:underline">
+                          {vendor.website}
+                        </a>
+                      </div>
+                    )}
+                    {vendor.services && (
+                      <div className="mt-3 pt-3 border-t border-surface-200 dark:border-surface-700">
+                        <p className="font-medium mb-1">Services:</p>
+                        <p>{vendor.services}</p>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 card">
           <Tag size={48} className="mx-auto text-surface-400 mb-4" />
           <h3 className="text-lg font-medium mb-2">No vendors found</h3>
           <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
@@ -336,6 +415,8 @@ function Vendors() {
             </button>
           )}
         </div>
+          )}
+        </>
       )}
       
       {/* Vendor Form Modal */}
@@ -355,9 +436,9 @@ function Vendors() {
                 <label htmlFor="name" className="label">Vendor Name</label>
                 <input
                   id="name"
-                  name="name"
+                  name="Name"
                   type="text"
-                  value={formData.name}
+                  value={formData.Name}
                   onChange={handleInputChange}
                   className={`input ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
                   placeholder="Company or business name"
@@ -501,7 +582,7 @@ function Vendors() {
                 onClick={() => setIsModalOpen(false)}
                 className="btn btn-outline"
               >
-                Cancel
+                disabled={loading}>
               </button>
               <button
                 type="submit"

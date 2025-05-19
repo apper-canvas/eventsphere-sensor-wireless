@@ -3,13 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { Plus, Filter, Search, ChevronDown, ChevronUp, Calendar, MapPin, Users, Tag, CheckCircle, XCircle } from 'lucide-react';
 import FormModal from '../components/FormModal';
-import { events as initialEvents, clients, eventTypes } from '../utils/mockData';
+import { eventTypes } from '../utils/mockData';
 import { validateRequired, validateNumeric, validateDateRange, formatDate } from '../utils/formUtils';
+import eventService from '../services/eventService';
+import clientService from '../services/clientService';
 
 function Events() {
   // State for events data
-  const [events, setEvents] = useState(initialEvents);
-  
+  const [events, setEvents] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
   // State for modal and form
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentEvent, setCurrentEvent] = useState(null);
@@ -34,6 +37,48 @@ function Events() {
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortConfig, setSortConfig] = useState({ key: 'startDate', direction: 'asc' });
+  
+  // Fetch events when component mounts or filters change
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch events
+        const data = await eventService.fetchEvents({
+          searchQuery: searchQuery,
+          type: typeFilter !== 'All' ? typeFilter : null,
+          status: statusFilter !== 'All' ? statusFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedData = data.map(event => ({
+          id: event.Id,
+          title: event.title,
+          type: event.type,
+          location: event.location,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          status: event.status,
+          budget: event.budget,
+          attendees: event.attendees,
+          description: event.description,
+          clientId: event.client,
+          client: event.clientDetails?.Name || 'Unknown Client'
+        }));
+        setEvents(formattedData);
+        
+        // Fetch clients for the dropdown
+        const clientsData = await clientService.fetchClients();
+        setClients(clientsData.map(client => ({ id: client.Id, name: client.Name })));
+      } catch (error) {
+        toast.error('Failed to load data: ' + (error.message || 'Unknown error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [searchQuery, typeFilter, statusFilter]);
   
   // Initialize form data when editing an event
   useEffect(() => {
@@ -123,52 +168,91 @@ function Events() {
   
   // Handle form submission
   const handleSubmit = (e) => {
-    e.preventDefault();
+   e.preventDefault();
+    setLoading(true);
     
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form.');
-      return;
-    }
-    
-    try {
-      const eventData = {
-        ...formData,
-        budget: parseFloat(formData.budget),
-        attendees: parseInt(formData.attendees),
-        clientId: parseInt(formData.clientId),
-        client: clients.find(c => c.id === parseInt(formData.clientId))?.name || 'Unknown Client'
-      };
-      
-      if (currentEvent) {
-        // Update existing event
-        const updatedEvents = events.map(event => 
-          event.id === currentEvent.id ? { ...eventData, id: currentEvent.id } : event
-        );
-        setEvents(updatedEvents);
-        toast.success('Event updated successfully!');
-      } else {
-        // Create new event
-        const newEvent = {
-          ...eventData,
-          id: Math.max(0, ...events.map(e => e.id)) + 1
-        };
-        setEvents([...events, newEvent]);
-        toast.success('Event created successfully!');
+    const submitForm = async () => {
+      if (!validateForm()) {
+        toast.error('Please fix the errors in the form.');
+        setLoading(false);
+        return;
       }
       
-      setIsModalOpen(false);
-    } catch (error) {
-      toast.error('An error occurred while saving the event.');
-      console.error('Error saving event:', error);
-    }
+      try {
+        // Format the event data for the API
+        const eventData = {
+          title: formData.title,
+          type: formData.type,
+          location: formData.location,
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          status: formData.status,
+          budget: parseFloat(formData.budget),
+          attendees: parseInt(formData.attendees),
+          description: formData.description,
+          client: parseInt(formData.clientId),
+          Name: formData.title // Use title as the Name field
+        };
+        
+        if (currentEvent) {
+          // Update existing event
+          await eventService.updateEvent(currentEvent.id, eventData);
+          toast.success('Event updated successfully!');
+        } else {
+          // Create new event
+          await eventService.createEvent(eventData);
+          toast.success('Event created successfully!');
+        }
+        
+        // Refresh event list from server
+        const data = await eventService.fetchEvents({
+          searchQuery: searchQuery,
+          type: typeFilter !== 'All' ? typeFilter : null,
+          status: statusFilter !== 'All' ? statusFilter : null
+        });
+        
+        // Map returned data to expected format
+        const formattedData = data.map(event => ({
+          id: event.Id,
+          title: event.title,
+          type: event.type,
+          location: event.location,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          status: event.status,
+          budget: event.budget,
+          attendees: event.attendees,
+          description: event.description,
+          clientId: event.client,
+          client: event.clientDetails?.Name || 'Unknown Client'
+        }));
+        
+        setEvents(formattedData);
+        setIsModalOpen(false);
+      } catch (error) {
+        toast.error('An error occurred while saving the event: ' + (error.message || 'Unknown error'));
+        console.error('Error saving event:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    submitForm();
   };
   
   // Handle event deletion
   const handleDeleteEvent = (eventId) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
-      const updatedEvents = events.filter(event => event.id !== eventId);
-      setEvents(updatedEvents);
-      toast.success('Event deleted successfully!');
+      setLoading(true);
+      eventService.deleteEvent(eventId)
+        .then(() => {
+          setEvents(events.filter(event => event.id !== eventId));
+          toast.success('Event deleted successfully!');
+        })
+        .catch(error => {
+          toast.error('Failed to delete event: ' + (error.message || 'Unknown error'));
+        })
+        .finally(() => setLoading(false));
     }
   };
   
@@ -317,138 +401,144 @@ function Events() {
           </div>
         </div>
       </div>
-      
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="card overflow-hidden"
-      >
-        <div className="overflow-x-auto">
-          {filteredAndSortedEvents.length > 0 ? (
-            <table className="w-full">
-              <thead className="bg-surface-100 dark:bg-surface-700">
-                <tr>
-                  <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
-                    onClick={() => requestSort('title')}
-                  >
-                    <div className="flex items-center">
-                      Event Name {getSortIndicator('title')}
-                    </div>
-                  </th>
-                  <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
-                    onClick={() => requestSort('client')}
-                  >
-                    <div className="flex items-center">
-                      Client {getSortIndicator('client')}
-                    </div>
-                  </th>
-                  <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
-                    onClick={() => requestSort('startDate')}
-                  >
-                    <div className="flex items-center">
-                      Date {getSortIndicator('startDate')}
-                    </div>
-                  </th>
-                  <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
-                    onClick={() => requestSort('budget')}
-                  >
-                    <div className="flex items-center">
-                      Budget {getSortIndicator('budget')}
-                    </div>
-                  </th>
-                  <th 
-                    className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
-                    onClick={() => requestSort('status')}
-                  >
-                    <div className="flex items-center">
-                      Status {getSortIndicator('status')}
-                    </div>
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-surface-800 divide-y divide-surface-200 dark:divide-surface-700">
-                {filteredAndSortedEvents.map((event) => (
-                  <tr key={event.id} className="hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium">{event.title}</div>
-                      <div className="text-xs text-surface-500 dark:text-surface-400 mt-1 flex items-center">
-                        <Tag size={14} className="mr-1" /> {event.type}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{event.client}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-surface-600 dark:text-surface-400 flex items-center">
-                        <Calendar size={14} className="mr-1" /> {formatDate(event.startDate)}
-                      </div>
-                      {event.endDate && event.startDate !== event.endDate && (
-                        <div className="text-xs text-surface-500 dark:text-surface-400 mt-1">
-                          to {formatDate(event.endDate)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">
-                      ${event.budget.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(event.status)}`}>
-                        {event.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <div className="flex justify-end space-x-2">
-                        <button 
-                          onClick={() => {
-                            setCurrentEvent(event);
-                            setIsModalOpen(true);
-                          }}
-                          className="text-primary hover:text-primary-dark"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteEvent(event.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="text-center py-12">
-              <Calendar size={48} className="mx-auto text-surface-400 mb-4" />
-              <h3 className="text-lg font-medium mb-2">No events found</h3>
-              <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
-                {searchQuery || typeFilter !== 'All' || statusFilter !== 'All' 
-                  ? "No events match your current filters. Try adjusting your search criteria."
-                  : "You haven't created any events yet. Click the 'Create New Event' button to get started."}
-              </p>
-              {(searchQuery || typeFilter !== 'All' || statusFilter !== 'All') && (
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    setTypeFilter('All');
-                    setStatusFilter('All');
-                  }}
-                  className="btn btn-outline"
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-          )}
+     
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
-      </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            {filteredAndSortedEvents.length > 0 ? (
+              <table className="w-full">
+                <thead className="bg-surface-100 dark:bg-surface-700">
+                  <tr>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
+                      onClick={() => requestSort('title')}
+                    >
+                      <div className="flex items-center">
+                        Event Name {getSortIndicator('title')}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
+                      onClick={() => requestSort('client')}
+                    >
+                      <div className="flex items-center">
+                        Client {getSortIndicator('client')}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
+                      onClick={() => requestSort('startDate')}
+                    >
+                      <div className="flex items-center">
+                        Date {getSortIndicator('startDate')}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
+                      onClick={() => requestSort('budget')}
+                    >
+                      <div className="flex items-center">
+                        Budget {getSortIndicator('budget')}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider cursor-pointer"
+                      onClick={() => requestSort('status')}
+                    >
+                      <div className="flex items-center">
+                        Status {getSortIndicator('status')}
+                      </div>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-surface-800 divide-y divide-surface-200 dark:divide-surface-700">
+                  {filteredAndSortedEvents.map((event) => (
+                    <tr key={event.id} className="hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium">{event.title}</div>
+                        <div className="text-xs text-surface-500 dark:text-surface-400 mt-1 flex items-center">
+                          <Tag size={14} className="mr-1" /> {event.type}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">{event.client}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-surface-600 dark:text-surface-400 flex items-center">
+                          <Calendar size={14} className="mr-1" /> {formatDate(event.startDate)}
+                        </div>
+                        {event.endDate && event.startDate !== event.endDate && (
+                          <div className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                            to {formatDate(event.endDate)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">
+                        ${event.budget.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(event.status)}`}>
+                          {event.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        <div className="flex justify-end space-x-2">
+                          <button 
+                            onClick={() => {
+                              setCurrentEvent(event);
+                              setIsModalOpen(true);
+                            }}
+                            className="text-primary hover:text-primary-dark"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteEvent(event.id)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="text-center py-12">
+                <Calendar size={48} className="mx-auto text-surface-400 mb-4" />
+                <h3 className="text-lg font-medium mb-2">No events found</h3>
+                <p className="text-surface-500 dark:text-surface-400 max-w-md mx-auto mb-6">
+                  {searchQuery || typeFilter !== 'All' || statusFilter !== 'All' 
+                    ? "No events match your current filters. Try adjusting your search criteria."
+                    : "You haven't created any events yet. Click the 'Create New Event' button to get started."}
+                </p>
+                {(searchQuery || typeFilter !== 'All' || statusFilter !== 'All') && (
+                  <button 
+                    onClick={() => {
+                      setSearchQuery('');
+                      setTypeFilter('All');
+                      setStatusFilter('All');
+                    }}
+                    className="btn btn-outline"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Event Form Modal */}
       <AnimatePresence>
@@ -645,7 +735,7 @@ function Events() {
               <button
                 type="submit"
                 className="btn btn-primary"
-              >
+                disabled={loading}>
                 {currentEvent ? (
                   <>
                     <CheckCircle size={18} className="mr-2" />
