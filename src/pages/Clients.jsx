@@ -357,12 +357,12 @@ function Clients() {
                 <button 
                   onClick={() => {
                     setSearchQuery('');
-                  setTypeFilter('All');
-                }}
-                className="btn btn-outline"
-              >
-                Clear Filters
-              </button>
+                    setTypeFilter('All');
+                  }}
+                  className="btn btn-outline"
+                >
+                  Clear Filters
+                </button>
             )}
           </div>
         )}
@@ -370,15 +370,16 @@ function Clients() {
 
       {/* Client Form Modal */}
       <AnimatePresence>
-        {isModalOpen && <FormModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title={currentClient ? "Edit Client" : "Create New Client"}
-          description={currentClient ? "Update client information" : "Fill in the details to create a new client"}
-        >
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            <div>
-              {/* Name */}
+        {isModalOpen && (
+          <FormModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            title={currentClient ? "Edit Client" : "Create New Client"}
+            description={currentClient ? "Update client information" : "Fill in the details to create a new client"}
+          >
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              <div>
+                {/* Name */}
                 <label htmlFor="name" className="label">Client Name</label>
                 <input
                   id="Name"
@@ -389,133 +390,133 @@ function Clients() {
                   placeholder="Individual or company name"
                 />
                 {errors.Name && <p className="mt-1 text-sm text-red-500">{errors.Name}</p>}
+
+                {/* Type */}
+                <div>
+                  <label htmlFor="type" className="label">Client Type</label>
+                  <select
+                    id="type"
+                    name="type"
+                    value={formData.type}
+                    onChange={handleInputChange}
+                    className={`input ${errors.type ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  >
+                    <option value="">Select client type</option>
+                    {clientTypes.filter(type => type !== 'All').map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                  {errors.type && <p className="mt-1 text-sm text-red-500">{errors.type}</p>}
+                </div>
+                
+                {/* Email */}
+                <div>
+                  <label htmlFor="email" className="label">Email</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail size={16} className="text-surface-400" />
+                    </div>
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className={`input pl-10 ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      placeholder="client@example.com"
+                    />
+                  </div>
+                  {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
+                </div>
+                
+                {/* Phone */}
+                <div>
+                  <label htmlFor="phone" className="label">Phone Number</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Phone size={16} className="text-surface-400" />
+                    </div>
+                    <input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className={`input pl-10 ${errors.phone ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      placeholder="(555) 123-4567"
+                    />
+                  </div>
+                  {errors.phone && <p className="mt-1 text-sm text-red-500">{errors.phone}</p>}
+                </div>
+                
+                {/* Address */}
+                <div className="col-span-full">
+                  <label htmlFor="address" className="label">Address</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <MapPin size={16} className="text-surface-400" />
+                    </div>
+                    <input
+                      id="address"
+                      name="address"
+                      type="text"
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      className="input pl-10"
+                      placeholder="Street address, city, state, zip"
+                    />
+                  </div>
+                </div>
+                
+                {/* Preferences */}
+                <div className="col-span-full">
+                  <label htmlFor="preferences" className="label">Preferences</label>
+                  <div className="relative">
+                    <div className="absolute top-3 left-3 pointer-events-none">
+                      <Heart size={16} className="text-surface-400" />
+                    </div>
+                    <textarea
+                      id="preferences"
+                      name="preferences"
+                      value={formData.preferences}
+                      onChange={handleInputChange}
+                      rows={3}
+                      className="input pl-10"
+                      placeholder="Event preferences, dietary restrictions, etc."
+                    ></textarea>
+                  </div>
+                </div>
               </div>
               
-              {/* Type */}
-              <div>
-                <label htmlFor="type" className="label">Client Type</label>
-                <select
-                  id="type"
-                  name="type"
-                  value={formData.type}
-                  onChange={handleInputChange}
-                  className={`input ${errors.type ? 'border-red-500 focus:ring-red-500' : ''}`}
+              <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="btn btn-outline"
                 >
-                  <option value="">Select client type</option>
-                  {clientTypes.filter(type => type !== 'All').map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-                {errors.type && <p className="mt-1 text-sm text-red-500">{errors.type}</p>}
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn btn-primary"
+                >
+                  {currentClient ? (
+                    <>
+                      <CheckCircle size={18} className="mr-2" />
+                      Update Client
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={18} className="mr-2" />
+                      Create Client
+                    </>
+                  )}
+                </button>
               </div>
-              
-              {/* Email */}
-              <div>
-                <label htmlFor="email" className="label">Email</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail size={16} className="text-surface-400" />
-                  </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className={`input pl-10 ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
-                    placeholder="client@example.com"
-                  />
-                </div>
-                {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
-              </div>
-              
-              {/* Phone */}
-              <div>
-                <label htmlFor="phone" className="label">Phone Number</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Phone size={16} className="text-surface-400" />
-                  </div>
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className={`input pl-10 ${errors.phone ? 'border-red-500 focus:ring-red-500' : ''}`}
-                    placeholder="(555) 123-4567"
-                  />
-                </div>
-                {errors.phone && <p className="mt-1 text-sm text-red-500">{errors.phone}</p>}
-              </div>
-              
-              {/* Address */}
-              <div className="col-span-full">
-                <label htmlFor="address" className="label">Address</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <MapPin size={16} className="text-surface-400" />
-                  </div>
-                  <input
-                    id="address"
-                    name="address"
-                    type="text"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    className="input pl-10"
-                    placeholder="Street address, city, state, zip"
-                  />
-                </div>
-              </div>
-              
-              {/* Preferences */}
-              <div className="col-span-full">
-                <label htmlFor="preferences" className="label">Preferences</label>
-                <div className="relative">
-                  <div className="absolute top-3 left-3 pointer-events-none">
-                    <Heart size={16} className="text-surface-400" />
-                  </div>
-                  <textarea
-                    id="preferences"
-                    name="preferences"
-                    value={formData.preferences}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="input pl-10"
-                    placeholder="Event preferences, dietary restrictions, etc."
-                  ></textarea>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">
-               <button
-                 type="button"
-                 onClick={() => setIsModalOpen(false)}
-                 className="btn btn-outline"
-               >
-                 Cancel
-               </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary"
-              >
-                {currentClient ? (
-                  <>
-                    <CheckCircle size={18} className="mr-2" />
-                    Update Client
-                  </>
-                ) : (
-                  <>
-                    <Plus size={18} className="mr-2" />
-                    Create Client
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </FormModal>}
+            </form>
+          </FormModal>
+        )}
       </AnimatePresence>
     </>
   );
