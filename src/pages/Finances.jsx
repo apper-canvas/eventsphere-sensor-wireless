@@ -616,9 +616,6 @@ function Finances() {
                 )}
               </div>
             )}
-          </motion.div>
-      </>
-      <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Event */}
@@ -811,6 +808,8 @@ function Finances() {
               </button>
             </div>
           </form>
+          </motion.div>
+        <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
       </FormModal>
     </>
   );
