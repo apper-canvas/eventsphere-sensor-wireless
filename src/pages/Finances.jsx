@@ -541,11 +541,8 @@ function Finances() {
                   <option value="expense">Expense</option>
                 </select>
               </div>
+              </div>
             </div>
-                    <option value="all">All Types</option>
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
-                  </select>
             {filteredFinances.length > 0 ? (
               <table className="w-full">
                 <thead className="bg-surface-100 dark:bg-surface-700">
@@ -618,9 +615,7 @@ function Finances() {
               </div>
             )}
           </div>
-        </motion.div>
-      
-        <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
+      <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Event */}
@@ -813,9 +808,8 @@ function Finances() {
               </button>
             </div>
           </form>
-        </FormModal>
-      </AnimatePresence>
-    </div>
+      </FormModal>
+    </>
   );
 }
 
