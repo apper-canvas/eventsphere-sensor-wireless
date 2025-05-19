@@ -407,13 +407,11 @@ function Finances() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       {loading ? (
-        <div className="flex justify-center items-center py-20">
+        <div className="flex justify-center items-center py-20 col-span-full">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
       ) : (
         <>
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -475,7 +473,8 @@ function Finances() {
             </div>
             <p className="text-2xl font-bold">{formatCurrency(summary.pendingExpenses)}</p>
           </motion.div>
-        </div>
+        </>
+      )}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -498,32 +497,36 @@ function Finances() {
           <div className="p-6 border-b border-surface-200 dark:border-surface-700">
             <h3 className="text-lg font-medium">Financial Transactions</h3>
           </div>
-          {/* Filters */}
-          <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex flex-col md:flex-row gap-4">
-            <div className="relative flex-grow">               
-              <input
-                type="text"
-                placeholder="Search transactions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-10"
-              />
-            <div className="flex gap-4">
-              <div className="relative md:w-48">
+            {/* Filters */}
+            <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex flex-col md:flex-row gap-4">
+              <div className="relative flex-grow">               
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Filter size={18} className="text-surface-400" />
+                  <Search size={18} className="text-surface-400" />
                 </div>
-                <select
-                  value={eventFilter}
-                  onChange={(e) => setEventFilter(e.target.value)}
-                  className="input pl-10 appearance-none"
-                >
-                  <option value="all">All Events</option>
-                  {events.map(event => (
-                    <option key={event.id} value={event.id}>{event.title}</option>
-                  ))}
-                </select>
-              
+                <input
+                  type="text"
+                  placeholder="Search transactions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input pl-10"
+                />
+              </div>
+              <div className="flex gap-4">
+                <div className="relative md:w-48">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Filter size={18} className="text-surface-400" />
+                  </div>
+                  <select
+                    value={eventFilter}
+                    onChange={(e) => setEventFilter(e.target.value)}
+                    className="input pl-10 appearance-none"
+                  >
+                    <option value="all">All Events</option>
+                    {events.map(event => (
+                      <option key={event.id} value={event.id}>{event.title}</option>
+                    ))}
+                  </select>
+                </div>
               <div className="relative md:w-48">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Filter size={18} className="text-surface-400" />
@@ -539,9 +542,10 @@ function Finances() {
                 </select>
               </div>
             </div>
-          
-          {/* Transactions Table */}
-          <div className="overflow-x-auto">
+                    <option value="all">All Types</option>
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                  </select>
             {filteredFinances.length > 0 ? (
               <table className="w-full">
                 <thead className="bg-surface-100 dark:bg-surface-700">
@@ -615,10 +619,8 @@ function Finances() {
             )}
           </div>
         </motion.div>
-        </>
-      )}
       
-      <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
+        <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Event */}
@@ -813,7 +815,7 @@ function Finances() {
           </form>
         </FormModal>
       </AnimatePresence>
-    </>
+    </div>
   );
 }
 
