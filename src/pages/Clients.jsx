@@ -364,7 +364,7 @@ function Clients() {
                   Clear Filters
                 </button>
             )}
-          </div>
+            </div>
         )}
       </div>
 
