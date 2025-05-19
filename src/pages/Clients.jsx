@@ -354,7 +354,7 @@ function Clients() {
                   : "You haven't added any clients yet. Click the 'Create New Client' button to get started."}
               </p>
               {(searchQuery || typeFilter !== 'All') && (
-                <button 
+                <button
                   onClick={() => {
                     setSearchQuery('');
                     setTypeFilter('All');
@@ -363,12 +363,12 @@ function Clients() {
                 >
                   Clear Filters
                 </button>
-            )}
+              )}
             </div>
+          )}
         )}
-      </div>
 
-      {/* Client Form Modal */}
+      <AnimatePresence>
       <AnimatePresence>
         {isModalOpen && (
           <FormModal
