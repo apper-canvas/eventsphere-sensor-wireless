@@ -545,7 +545,7 @@ function Finances() {
               </div>
               </div>
             </div>
-            {filteredFinances.length > 0 ? (
+          </div>  {filteredFinances.length > 0 ? (
               <table className="w-full">
                 <thead className="bg-surface-100 dark:bg-surface-700">
                   <tr>
