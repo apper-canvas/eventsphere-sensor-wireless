@@ -77,7 +77,7 @@ function Clients() {
       Name: '',
       email: '',
       phone: '',
-      type: '',
+      type: '', 
       address: '',
       preferences: ''
     });
@@ -374,25 +374,21 @@ function Clients() {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           title={currentClient ? "Edit Client" : "Create New Client"}
-          description={currentClient 
-             <div className="col-span-full">
-            : "Fill in the details to create a new client"}
+          description={currentClient ? "Update client information" : "Fill in the details to create a new client"}
         >
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                  name="Name"
+            <div>
               {/* Name */}
-                  value={formData.Name}
                 <label htmlFor="name" className="label">Client Name</label>
-                  className={`input ${errors.Name ? 'border-red-500 focus:ring-red-500' : ''}`}
-                  id="name"
-                  name="name"
-                {errors.Name && <p className="mt-1 text-sm text-red-500">{errors.Name}</p>}
-                  value={formData.name}
+                <input
+                  id="Name"
+                  name="Name"
+                  value={formData.Name}
                   onChange={handleInputChange}
-                  className={`input ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  className={`input ${errors.Name ? 'border-red-500 focus:ring-red-500' : ''}`}
                   placeholder="Individual or company name"
                 />
-                {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
+                {errors.Name && <p className="mt-1 text-sm text-red-500">{errors.Name}</p>}
               </div>
               
               {/* Type */}
@@ -493,15 +489,16 @@ function Clients() {
             </div>
             
             <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="btn btn-outline"
-              >
-                Cancel
-                disabled={loading}>
+               <button
+                 type="button"
+                 onClick={() => setIsModalOpen(false)}
+                 className="btn btn-outline"
+               >
+                 Cancel
+               </button>
               <button
                 type="submit"
+                disabled={loading}
                 className="btn btn-primary"
               >
                 {currentClient ? (
