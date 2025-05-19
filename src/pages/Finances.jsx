@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import Chart from 'react-apexcharts';
@@ -406,14 +406,6 @@ function Finances() {
       
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        onClick={handleNewItem}
-        className="btn btn-primary flex items-center"
-      >
-        <Plus size={18} className="mr-1" />
-        Add Transaction
-      </button>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-surface-600 dark:text-surface-400">Total Income</h3>
       {loading ? (
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -484,8 +476,6 @@ function Finances() {
             <p className="text-2xl font-bold">{formatCurrency(summary.pendingExpenses)}</p>
           </motion.div>
         </div>
-              value={searchQuery}
-        {/* Budget vs Actual Chart */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -508,13 +498,9 @@ function Finances() {
           <div className="p-6 border-b border-surface-200 dark:border-surface-700">
             <h3 className="text-lg font-medium">Financial Transactions</h3>
           </div>
-              >
           {/* Filters */}
           <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex flex-col md:flex-row gap-4">
-            <div className="relative flex-grow">
-                  <option key={event.id} value={event.id}>{event.title}</option>
-                <Search size={18} className="text-surface-400" />
-              </select>
+            <div className="relative flex-grow">               
               <input
                 type="text"
                 placeholder="Search transactions..."
@@ -522,8 +508,6 @@ function Finances() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="input pl-10"
               />
-              >
-                <option value="all">All Types</option>
             <div className="flex gap-4">
               <div className="relative md:w-48">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -539,7 +523,6 @@ function Finances() {
                     <option key={event.id} value={event.id}>{event.title}</option>
                   ))}
                 </select>
-            </div>
               
               <div className="relative md:w-48">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -555,8 +538,7 @@ function Finances() {
                   <option value="expense">Expense</option>
                 </select>
               </div>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Event</th>
+            </div>
           
           {/* Transactions Table */}
           <div className="overflow-x-auto">
@@ -571,7 +553,7 @@ function Finances() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Amount</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-surface-600 dark:text-surface-300 uppercase tracking-wider">Actions</th>
-                  ? "No transactions match your current filters. Try adjusting your search criteria."
+                  </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-surface-800 divide-y divide-surface-200 dark:divide-surface-700">
                   {filteredFinances.map((item) => (
@@ -635,7 +617,8 @@ function Finances() {
         </motion.div>
         </>
       )}
-        >
+      
+      <FormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={currentItem ? "Edit Transaction" : "Add Transaction"}>
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Event */}
